@@ -26,7 +26,7 @@ The full changes compared to Go-Play are:
 - **VOLUME Button** - In game, press `VOLUME` to mute/unmute audio. Press `VOLUME + UP` to increase volume. Press `VOLUME + DOWN` to decrease volume.
 - New hour glass icon (50% larger, 100% more retro)
 - New name, logo and firmware tile image
-- Quiet version with reduced volume levels from "go-play-quiet"
+- Improved audio scaling and levels
 
 ## Download
 
