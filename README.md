@@ -1,7 +1,11 @@
-# Super Go-Play
-![Super Go-Play](logo.png?raw=true "Super Go-Play")
+# Mega Go-Play
+![Mega Go-Play](logo.png?raw=true "Mega Go-Play")
 
 ## About
+
+Mega Go-Play is based on the improved Super Go-Play by mattkj. It features a re-written integer-based audio sample scaling that greatly reduces audible artifacts especially at low levels and is much lighter on the CPU. The 2 lowest audio levels are quieter than normal so a special quiet build should not be neccessary.
+Below is the Super Go-Play readme:
+
 
 Super Go-Play is a combination of two other Go-Play forks [(more info here)](https://forum.odroid.com/viewtopic.php?f=159&p=248618), plus the following changes:
 
@@ -10,7 +14,6 @@ Super Go-Play is a combination of two other Go-Play forks [(more info here)](htt
 - Gameboy palette cycling changes
 - Reversed `MENU` button behavior
 - New name, logo and firmware tile image
-- Two versions: regular and quiet with reduced volume levels from "go-play-quiet"
 
 ## Full Feature List
 
