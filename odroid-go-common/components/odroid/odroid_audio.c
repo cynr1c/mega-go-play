@@ -10,11 +10,12 @@
 
 #define I2S_NUM (I2S_NUM_0)
 
+//1 is full levels, 2 half, 3 quarter,... note that prescaling sacrifices audio resolution!
+#define SAMPLE_PRESCALER	(1)
+
 static int AudioSink = ODROID_AUDIO_SINK_SPEAKER;
-static float Volume = 1.0f;
 static odroid_volume_level volumeLevel = ODROID_VOLUME_LEVEL3;
 static odroid_volume_level preMuteVolumeLevel = 0;
-static int volumeLevels[] = {0, 125, 250, 500, 1000};
 static int audio_sample_rate;
 
 
@@ -32,12 +33,11 @@ void odroid_audio_volume_set(odroid_volume_level value)
     }
 
     volumeLevel = value;
-    Volume = (float)volumeLevels[value] * 0.001f;
 }
 
 void odroid_audio_volume_change()
 {
-    int level = (volumeLevel + 1) % ODROID_VOLUME_LEVEL_COUNT;
+    unsigned int level = (volumeLevel + 1) % ODROID_VOLUME_LEVEL_COUNT;
     odroid_audio_volume_set(level);
 
     odroid_settings_Volume_set(level);
@@ -45,7 +45,7 @@ void odroid_audio_volume_change()
 
 void odroid_audio_volume_increase()
 {
-    int level = (volumeLevel == ODROID_VOLUME_LEVEL0) ? preMuteVolumeLevel + 1 : volumeLevel + 1;
+    unsigned int level = (volumeLevel == ODROID_VOLUME_LEVEL0) ? preMuteVolumeLevel + 1 : volumeLevel + 1;
 
     if (level >= ODROID_VOLUME_LEVEL_COUNT)
     {
@@ -63,7 +63,7 @@ void odroid_audio_volume_increase()
 
 void odroid_audio_volume_decrease()
 {
-    int level = (volumeLevel == ODROID_VOLUME_LEVEL0) ? preMuteVolumeLevel - 1 : volumeLevel - 1;
+    unsigned int level = (volumeLevel == ODROID_VOLUME_LEVEL0) ? preMuteVolumeLevel - 1 : volumeLevel - 1;
 
     if (level < ODROID_VOLUME_LEVEL1)
     {
@@ -211,6 +211,39 @@ void odroid_audio_terminate()
     }
 }
 
+static inline void __attribute__((optimize("O3"))) odroid_audio_scale_sample(uint16_t sample16, int vol, uint16_t * dac0, uint16_t* dac1)
+{
+	//we've got 2 seperate dacs, use them!
+	switch (vol)
+	{
+		case ODROID_VOLUME_LEVEL0:
+			*dac0=0;
+			*dac1=0;
+			break;
+		case ODROID_VOLUME_LEVEL1:
+			//1-7/8=1/8
+			*dac0=sample16;
+			*dac1=((uint32_t)sample16*7 + 4)>>3;
+			break;
+		case ODROID_VOLUME_LEVEL2:
+			//1-3/4=1/4
+			*dac0=sample16;
+			*dac1=((uint32_t)sample16*3 + 2)>>2;
+			break;
+		case ODROID_VOLUME_LEVEL3:
+			//1, no error
+			*dac0=sample16;
+			*dac1=0x8000;
+			break;
+		case ODROID_VOLUME_LEVEL4:
+		default:
+			//2, no error
+			*dac0=sample16;
+			*dac1=~sample16;
+			break;
+	}
+}
+
 void odroid_audio_submit(short* stereoAudioBuffer, int frameCount)
 {
     short currentAudioSampleCount = frameCount * 2;
@@ -223,56 +256,22 @@ void odroid_audio_submit(short* stereoAudioBuffer, int frameCount)
             uint16_t dac0;
             uint16_t dac1;
 
-            if (Volume == 0.0f)
-            {
-                // Disable amplifier
-                dac0 = 0;
-                dac1 = 0;
-            }
-            else
-            {
-                // Down mix stero to mono
-                int32_t sample = stereoAudioBuffer[i];
-                sample += stereoAudioBuffer[i + 1];
-                sample >>= 1;
+			//replace the horrible float-based and partially just plain wrong sample processing
+            //downmix - samples are 16bit, dac only uses 8 msbs
+            int32_t sample=stereoAudioBuffer[i] + stereoAudioBuffer[i+1];	//sign + max 16bit
+#ifdef SAMPLE_PRESCALER
+            //use simple integer shiftable divisions - compiler should take care of sign bit
+			sample >>= SAMPLE_PRESCALER;
+#endif
+			uint16_t sample16=(sample+0x8000)&0xffff;
+            odroid_audio_scale_sample(sample16, volumeLevel, &dac0, &dac1);
 
-                // Normalize
-                const float sn = (float)sample / 0x8000;
-
-                // Scale
-                const int magnitude = 127 + 127;
-                const float range = magnitude  * sn * Volume;
-
-                // Convert to differential output
-                if (range > 127)
-                {
-                    dac1 = (range - 127);
-                    dac0 = 127;
-                }
-                else if (range < -127)
-                {
-                    dac1  = (range + 127);
-                    dac0 = -127;
-                }
-                else
-                {
-                    dac1 = 0;
-                    dac0 = range;
-                }
-
-                dac0 += 0x80;
-                dac1 = 0x80 - dac1;
-
-                dac0 <<= 8;
-                dac1 <<= 8;
-            }
-
-            stereoAudioBuffer[i] = (int16_t)dac1;
-            stereoAudioBuffer[i + 1] = (int16_t)dac0;
+            stereoAudioBuffer[i] = (short) dac1;
+            stereoAudioBuffer[i + 1] = (short) dac0;
         }
 
-        int len = currentAudioSampleCount * sizeof(int16_t);
-        int count = i2s_write_bytes(I2S_NUM, (const char *)stereoAudioBuffer, len, portMAX_DELAY);
+        int len = currentAudioSampleCount * 2;
+        int count = i2s_write_bytes(I2S_NUM, stereoAudioBuffer, len, portMAX_DELAY);
         if (count != len)
         {
             printf("i2s_write_bytes: count (%d) != len (%d)\n", count, len);
@@ -285,12 +284,31 @@ void odroid_audio_submit(short* stereoAudioBuffer, int frameCount)
 
         for (short i = 0; i < currentAudioSampleCount; ++i)
         {
-            int sample = stereoAudioBuffer[i] * Volume;
+            int sample;	//use simple integer shiftable divisions
+            switch (volumeLevel)
+            {
+				case ODROID_VOLUME_LEVEL0:
+					sample = 0;
+					break;
+				case ODROID_VOLUME_LEVEL1:
+					sample = stereoAudioBuffer[i] / 8;
+					break;
+				case ODROID_VOLUME_LEVEL2:
+					sample = stereoAudioBuffer[i] / 4;
+					break;
+				case ODROID_VOLUME_LEVEL3:
+					sample = stereoAudioBuffer[i] / 2;
+					break;
+				case ODROID_VOLUME_LEVEL4:
+				default:
+					sample = stereoAudioBuffer[i];
+					break;
+            }
 
             if (sample > 32767)
                 sample = 32767;
             else if (sample < -32768)
-                sample = -32767;
+                sample = -32768;
 
             stereoAudioBuffer[i] = (short)sample;
         }
