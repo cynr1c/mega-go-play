@@ -3,7 +3,7 @@
 
 ## About
 
-Mega Go-Play is based on the improved Super Go-Play by mattkj. It features a re-written integer-based audio sample scaling that greatly reduces audible artifacts especially at low levels and is much lighter on the CPU. The 2 lowest audio levels are quieter than normal so a special quiet build should not be neccessary.
+Mega Go-Play is based on the improved Super Go-Play by [mattkj](https://github.com/mattkj/super-go-play). It features a re-written integer-based audio sample scaling that greatly reduces audible artifacts especially at low levels and is much lighter on the CPU. The 2 lowest audio levels are quieter than normal so a special quiet build should not be neccessary.
 Below is the Super Go-Play readme:
 
 
@@ -30,7 +30,7 @@ The full changes compared to Go-Play are:
 
 ## Download
 
-- [Latest release is here](https://github.com/mattkj/super-go-play/releases/tag/v1.0.0)
+- [Latest release is here](https://github.com/cynr1c/mega-go-play/releases/tag/1.1.0)
 
 ## Installation
 
